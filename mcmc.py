@@ -74,7 +74,7 @@ class Ebola(object):
                                          
             for i, theta in enumerate(samples):
                 # compute ode model solution
-                theta_ode = theta[:-8]
+                theta_ode = theta[:-6]
                 sol = self.solve(*theta_ode)
                 if sol is not None:
                     model_cases[i] = sol[:, 4]
@@ -105,29 +105,51 @@ class Ebola(object):
         else:
             ax0, ax1, ax2 = ax
 
+        sample_examples = np.random.choice(len(samples), 5)
+
         if samples is not None:
-            ax0.plot(t, c50, linestyle='solid', marker='None', color='red')
+            ax0.plot(t, c50, linestyle='solid', marker='None',
+                     color='red', lw=3)
             ax0.fill_between(t, c05, c95, color='red', alpha=0.2)
             ax0.fill_between(t, c16, c84, color='red', alpha=0.2)
-            ax1.plot(t[1:], dc50, linestyle='solid', marker='None', color='red')
+            ax1.plot(t[1:], dc50, linestyle='solid', marker='None',
+                     color='red', lw=3)
             ax1.fill_between(t[1:], dc05, dc95, color='red', alpha=0.2)
             ax1.fill_between(t[1:], dc16, dc84, color='red', alpha=0.2)
-            ax2.plot(t[1:], rc50, linestyle='solid', marker='None', color='red')
+            ax2.plot(t[1:], rc50, linestyle='solid', marker='None',
+                     color='red', lw=3)
             ax2.fill_between(t[1:], rc05, rc95, color='red', alpha=0.2)
             ax2.fill_between(t[1:], rc16, rc84, color='red', alpha=0.2)
+            for j in sample_examples:
+                ax0.plot(t, model_cases[j], linestyle='solid',
+                         marker='None', color='red')
+                ax1.plot(t[1:], delta_model_cases[j], linestyle='solid',
+                         marker='None', color='red')
+                ax2.plot(t[1:], rate_model_cases[j], linestyle='solid',
+                         marker='None', color='red')
         ax0.plot(t, self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
         ax1.plot(t[1:], self.delta_cases, color='red', mfc='None', marker='o', linestyle='None')
         ax2.plot(t[1:], rate_cases, color='red', mfc='None', marker='o', linestyle='None')
         if samples is not None:
-            ax0.plot(t, d50, linestyle='solid', marker='None', color='blue')
+            ax0.plot(t, d50, linestyle='solid', marker='None',
+                     color='blue', lw=3)
             ax0.fill_between(t, d05, d95, color='blue', alpha=0.2)
             ax0.fill_between(t, d16, d84, color='blue', alpha=0.2)
-            ax1.plot(t[1:], dd50, linestyle='solid', marker='None', color='blue')
+            ax1.plot(t[1:], dd50, linestyle='solid', marker='None',
+                     color='blue', lw=3)
             ax1.fill_between(t[1:], dd05, dd95, color='blue', alpha=0.2)
             ax1.fill_between(t[1:], dd16, dd84, color='blue', alpha=0.2)
-            ax2.plot(t[1:], rd50, linestyle='solid', marker='None', color='blue')
+            ax2.plot(t[1:], rd50, linestyle='solid', marker='None',
+                     color='blue', lw=3)
             ax2.fill_between(t[1:], rd05, rd95, color='blue', alpha=0.2)
             ax2.fill_between(t[1:], rd16, rd84, color='blue', alpha=0.2)
+            for j in sample_examples:
+                ax0.plot(t, model_deaths[j], linestyle='solid',
+                         marker='None', color='blue')
+                ax1.plot(t[1:], delta_model_deaths[j], linestyle='solid',
+                         marker='None', color='blue')
+                ax2.plot(t[1:], rate_model_deaths[j], linestyle='solid',
+                         marker='None', color='blue')
         ax0.plot(t, self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
         ax1.plot(t[1:], self.delta_deaths, color='blue', mfc='None', marker='o', linestyle='None')
         ax2.plot(t[1:], rate_deaths, color='blue', mfc='None', marker='o', linestyle='None')
@@ -138,9 +160,9 @@ class Ebola(object):
             ax2.axvline(self.onlyfirst, linestyle=':')
 
     def log_prior(self, theta):
-        b, k, tau, sigma, g, f, offset = theta[:-8]
-        scatter_cases, scatter_cases_outlier, prob_cases_scatter, prob_cases_outlier = theta[-8:-4]
-        scatter_deaths, scatter_deaths_outlier, prob_deaths_scatter, prob_deaths_outlier = theta[-4:]
+        b, k, tau, sigma, g, f, offset = theta[:-6]
+        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
+        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
         logPs = []
         # individual priors
         logPs.append(beta.logpdf(b, 1.1, 2))
@@ -154,17 +176,11 @@ class Ebola(object):
         logPs.append(lognorm.logpdf(scatter_cases_outlier, 0.5, 0, 100))
         logPs.append(lognorm.logpdf(scatter_deaths, 2, 0, 10))
         logPs.append(lognorm.logpdf(scatter_deaths_outlier, 0.5, 0, 100))
-        logPs.append(beta.logpdf(prob_cases_scatter, 1, 10))
         logPs.append(beta.logpdf(prob_cases_outlier, 1, 100))
-        logPs.append(beta.logpdf(prob_deaths_scatter, 1, 10))
         logPs.append(beta.logpdf(prob_deaths_outlier, 1, 100))
         # combined priors
         logPs.append(lognorm.logpdf(scatter_cases_outlier/scatter_cases, 1.5, 1, 1000))
-        logPs.append(lognorm.logpdf(prob_cases_scatter/prob_cases_outlier, 1.5, 1, 1000))
-        logPs.append(beta.logpdf(prob_cases_scatter+prob_cases_outlier, 1.01, 3))
         logPs.append(lognorm.logpdf(scatter_deaths_outlier/scatter_deaths, 1.5, 1, 1000))
-        logPs.append(lognorm.logpdf(prob_deaths_scatter/prob_deaths_outlier, 1.5, 1, 1000))
-        logPs.append(beta.logpdf(prob_deaths_scatter+prob_deaths_outlier, 1.01, 3))
         return np.sum(logPs)
 
     def log_like(self, theta):
@@ -172,7 +188,7 @@ class Ebola(object):
         if np.isinf(logP):
             return -np.infty
         # compute ode model solution
-        theta_ode = theta[:-8]
+        theta_ode = theta[:-6]
         sol = self.solve(*theta_ode)
         if sol is None:
             return -np.infty
@@ -184,48 +200,39 @@ class Ebola(object):
         np.putmask(delta_model_cases, delta_model_cases <= 0, 1e-9)
         np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
         # compute loglike
-        scatter_cases, scatter_cases_outlier, prob_cases_scatter, prob_cases_outlier = theta[-8:-4]
-        scatter_deaths, scatter_deaths_outlier, prob_deaths_scatter, prob_deaths_outlier = theta[-4:]
+        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
+        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
         # avoid NaNs in logarithm
-        prob_cases_scatter = np.clip(prob_cases_scatter, 1e-99, 1-1e-99)
         prob_cases_outlier = np.clip(prob_cases_outlier, 1e-99, 1-1e-99)
         scatter_cases = np.clip(scatter_cases, 1e-9, 1e9)
         scatter_cases_outlier = np.clip(scatter_cases_outlier, 1e-9, 1e9)
-        prob_deaths_scatter = np.clip(prob_deaths_scatter, 1e-99, 1-1e-99)
         prob_deaths_outlier = np.clip(prob_deaths_outlier, 1e-99, 1-1e-99)
         scatter_deaths = np.clip(scatter_deaths, 1e-9, 1e9)
         scatter_deaths_outlier = np.clip(scatter_deaths_outlier, 1e-9, 1e9)
         
         if self.onlyfirst is not None:
-            delta_cases = self.delta_cases[:self.onlyfirst]
-            delta_deaths = self.delta_deaths[:self.onlyfirst]
-            delta_model_cases = delta_model_cases[:self.onlyfirst]
-            delta_model_deaths = delta_model_deaths[:self.onlyfirst]
+            cases = self.df['Total Cases'][:self.onlyfirst]
+            deaths = self.df['Total Deaths'][:self.onlyfirst]
+            model_cases = model_cases[:self.onlyfirst]
+            model_deaths = model_deaths[:self.onlyfirst]
         else:
-            delta_cases = self.delta_cases
-            delta_deaths = self.delta_deaths
+            cases = self.df['Total Cases']
+            deaths = self.df['Total Deaths']
 
-        # model logL as sum of three distributions
-        # 1: an intrinsic Poisson distribution on the true counts
+        # model logL as sum of two distributions
         # 2: a Normal scatter 
         # 3: a Normal outlier scatter
-        # Originally tried with scatters proportional to the delta counts,
-        # but caused complications
         logLs = []
         # for cases
-        logLs.append(np.log(1 - prob_cases_outlier - prob_cases_scatter) +
-                     poisson.logpmf(delta_cases, delta_model_cases))
-        logLs.append(np.log(prob_cases_scatter) +
-                     norm.logpdf(delta_cases, delta_model_cases, scatter_cases))
+        logLs.append(np.log(1 - prob_cases_outlier) +
+                     norm.logpdf(cases, model_cases, scatter_cases))
         logLs.append(np.log(prob_cases_outlier) +
-                     norm.logpdf(delta_cases, delta_model_cases, scatter_cases_outlier))
+                     norm.logpdf(cases, model_cases, scatter_cases_outlier))
         # for deaths
-        logLs.append(np.log(1 - prob_deaths_outlier - prob_deaths_scatter) +
-                     poisson.logpmf(delta_deaths, delta_model_deaths))
-        logLs.append(np.log(prob_deaths_scatter) +
-                     norm.logpdf(delta_deaths, delta_model_deaths, scatter_deaths))
+        logLs.append(np.log(1 - prob_deaths_outlier) +
+                     norm.logpdf(deaths, model_deaths, scatter_deaths))
         logLs.append(np.log(prob_deaths_outlier) +
-                     norm.logpdf(delta_deaths, delta_model_deaths, scatter_deaths_outlier))
+                     norm.logpdf(deaths, model_deaths, scatter_deaths_outlier))
         # using logsumexp helps maintain numerical precision
         logL = np.sum(logsumexp(logLs, axis=0))
         if np.isnan(logL):
@@ -248,27 +255,30 @@ def main(args):
     np.random.seed(666)  # reproducible
 
     par = ('beta', 'k', 'tau', 'sigma', 'gamma', 'f', 'offset',
-           'scatter_cases', 'scatter_cases_outlier', 'prob_cases_scatter', 'prob_cases_outlier',
-           'scatter_deaths', 'scatter_deaths_outlier', 'prob_deaths_scatter', 'prob_deaths_outlier')
+           'scatter_cases', 'scatter_cases_outlier', 'prob_cases_outlier',
+           'scatter_deaths', 'scatter_deaths_outlier', 'prob_deaths_outlier')
     ndim = len(par)  # number of parameters in the model
     nwalkers = 50  # number of MCMC walkers
     ntemp = 5  # number of parallel-tempered chains
     nburn = 10000  # "burn-in" period to let chains stabilize
     nsamp = 50000  # number of MCMC steps to take after burn-in
 
-    p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 10.0, 0.1, 0.01, 1.0, 10.0, 0.1, 0.01])
+    p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 10.0, 0.01, 1.0, 10.0, 0.01])
     initial_theta = np.random.normal(p0, 0.1 * np.abs(p0), (ntemp, nwalkers, ndim))
 
     sampler = ptemcee.Sampler(nwalkers, ndim, e.log_like, e.log_prior, ntemps=ntemp, threads=8)
 
     timestamp = datetime.now().isoformat(timespec='minutes')
     theta = initial_theta
-    nupdate=10
+    nthin = 10
+    nupdate = 10
+    nsave = 100
     for i in tqdm(range((nburn + nsamp)//nupdate)):
-        sampler.run_mcmc(theta, nupdate)
+        sampler.run_mcmc(theta, nupdate, thin=nthin)
         theta = None
-        with open('chain-{}'.format(timestamp), 'wb') as f:
-            pickle.dump(sampler.chain, f)
+        if i % nsave == 0:
+            with open('chain-{}'.format(timestamp), 'wb') as f:
+                pickle.dump(sampler.chain, f)
 
     with open('chain-{}'.format(timestamp), 'wb') as f:
         pickle.dump(sampler.chain, f)
