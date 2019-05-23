@@ -113,7 +113,8 @@ class Ebola(object):
         else:
             ax0, ax1, ax2 = ax
 
-        sample_examples = np.random.choice(len(samples), 5)
+        #sample_examples = np.random.choice(len(samples), 5)
+        sample_examples = []
 
         if samples is not None:
             ax0.plot(t, c50, linestyle='solid', marker='None',
@@ -124,29 +125,18 @@ class Ebola(object):
                      color='red', lw=3)
             ax1.fill_between(t[1:], dc05, dc95, color='red', alpha=0.2)
             ax1.fill_between(t[1:], dc16, dc84, color='red', alpha=0.2)
-            ax2.plot(t[1:], rc50, linestyle='solid', marker='None',
-                     color='red', lw=3)
-            ax2.fill_between(t[1:], rc05, rc95, color='red', alpha=0.2)
-            ax2.fill_between(t[1:], rc16, rc84, color='red', alpha=0.2)
             for j in sample_examples:
                 ax0.plot(t, model_cases[j], linestyle='solid',
                          marker='None', color='red')
                 ax1.plot(t[1:], delta_model_cases[j], linestyle='solid',
                          marker='None', color='red')
-                ax2.plot(t[1:], rate_model_cases[j], linestyle='solid',
-                         marker='None', color='red')
         ax0.plot(t, self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
         ax1.plot(t[1:], self.delta_cases, color='red', mfc='None', marker='o', linestyle='None')
-        ax2.plot(t[1:], rate_cases, color='red', mfc='None', marker='o', linestyle='None')
         if samples is not None:
             ax0.plot(t, d50, linestyle='solid', marker='None',
                      color='blue', lw=3)
             ax0.fill_between(t, d05, d95, color='blue', alpha=0.2)
             ax0.fill_between(t, d16, d84, color='blue', alpha=0.2)
-            ax1.plot(t[1:], dd50, linestyle='solid', marker='None',
-                     color='blue', lw=3)
-            ax1.fill_between(t[1:], dd05, dd95, color='blue', alpha=0.2)
-            ax1.fill_between(t[1:], dd16, dd84, color='blue', alpha=0.2)
             ax2.plot(t[1:], rd50, linestyle='solid', marker='None',
                      color='blue', lw=3)
             ax2.fill_between(t[1:], rd05, rd95, color='blue', alpha=0.2)
@@ -154,13 +144,11 @@ class Ebola(object):
             for j in sample_examples:
                 ax0.plot(t, model_deaths[j], linestyle='solid',
                          marker='None', color='blue')
-                ax1.plot(t[1:], delta_model_deaths[j], linestyle='solid',
-                         marker='None', color='blue')
                 ax2.plot(t[1:], rate_model_deaths[j], linestyle='solid',
                          marker='None', color='blue')
         ax0.plot(t, self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
-        ax1.plot(t[1:], self.delta_deaths, color='blue', mfc='None', marker='o', linestyle='None')
         ax2.plot(t[1:], rate_deaths, color='blue', mfc='None', marker='o', linestyle='None')
+        #ax0.set_ylim(0, self.df['Total Cases'].max() * 1.1)
 
         if self.onlyfirst is not None:
             ax0.axvline(self.onlyfirst, linestyle=':')
