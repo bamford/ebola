@@ -14,16 +14,23 @@ import pickle
 from datetime import datetime
 from tqdm import tqdm
 import argparse
+from multiprocessing import Pool
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
 
 
 class Ebola(object):
 
     def __init__(self, N, country, plot=False, onlyfirst=None):
         df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
+        df = df.drop(columns=['Unnamed: 0'])
         df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
-        df['delta_time_weeks'] = (df['WHO report date'] - df['WHO report date'].min()).dt.weeks
+        df = df.set_index('WHO report date')
+        df = df.resample('W').mean()
+        df = df.dropna()
+        df['delta_time_weeks'] = (df.index - df.index.min()).days // 7 + 1
         df = df.sort_values('delta_time_weeks')
-        df = df.groupby('delta_time_weeks').mean().reset_index()
         self.df = df
         self.N = N
         self.onlyfirst = onlyfirst
@@ -255,7 +262,7 @@ def main(args):
 
     e = Ebola(args.N, args.country, plot=False)
 
-    # set up ptemcee
+    # set up emcee
     np.random.seed(666)  # reproducible
 
     par = ('beta', 'k', 'tau', 'sigma', 'gamma', 'f', 'offset',
@@ -263,27 +270,26 @@ def main(args):
            'scatter_deaths', 'scatter_deaths_outlier', 'prob_deaths_outlier')
     ndim = len(par)  # number of parameters in the model
     nwalkers = 50  # number of MCMC walkers
-    ntemp = 5  # number of parallel-tempered chains
     nburn = 10000  # "burn-in" period to let chains stabilize
     nsamp = 50000  # number of MCMC steps to take after burn-in
 
     p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 10.0, 0.01, 1.0, 10.0, 0.01])
-    initial_theta = np.random.normal(p0, 0.1 * np.abs(p0), (ntemp, nwalkers, ndim))
-
-    #sampler = ptemcee.Sampler(nwalkers, ndim, e.log_like, e.log_prior, ntemps=ntemp, threads=8)
-    sampler = emcee.Sampler(nwalkers, ndim, e.log_posterior, threads=4)
+    initial_theta = np.random.normal(p0, 0.1 * np.abs(p0), (nwalkers, ndim))
 
     timestamp = datetime.now().isoformat(timespec='minutes')
     theta = initial_theta
     nthin = 10
     nupdate = 10
     nsave = 100
-    for i in tqdm(range((nburn + nsamp)//nupdate)):
-        sampler.run_mcmc(theta, nupdate, thin=nthin)
-        theta = None
-        if i % nsave == 0:
-            with open('chain-{}'.format(timestamp), 'wb') as f:
-                pickle.dump(sampler.chain, f)
+
+    with Pool() as pool:
+        sampler = emcee.EnsembleSampler(nwalkers, ndim, e.log_posterior, pool=pool)
+        for i in tqdm(range((nburn + nsamp)//nupdate)):
+            sampler.run_mcmc(theta, nupdate, thin=nthin)
+            theta = None
+            if i % nsave == 0:
+                with open('chain-{}'.format(timestamp), 'wb') as f:
+                    pickle.dump(sampler.chain, f)
 
     with open('chain-{}'.format(timestamp), 'wb') as f:
         pickle.dump(sampler.chain, f)
