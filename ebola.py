@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# coding: utf-8
+
 from __future__ import  division, print_function
 
 import argparse
@@ -7,45 +10,30 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
-import gpflow
 from nnest.nested import NestedSampler
+from scipy.stats import poisson, norm, beta, gamma, lognorm
+from scipy.special import logsumexp
 
 
 class Ebola(object):
 
-    def __init__(self, N, country, plot=False):
+    def __init__(self, N, country, plot=False, onlyfirst=None):
         df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
         df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
-        df['delta_time_days'] = (df['WHO report date'] - df['WHO report date'].min()).dt.days
-        df = df.sort_values('delta_time_days')
-        print(df)
+        df = df.set_index('WHO report date')
+        df = df.resample('W').mean()
+        df = df.dropna()
+        df['delta_time_weeks'] = (df.index - df.index.min()).days // 7 + 1
+        df = df.sort_values('delta_time_weeks')
         self.df = df
         self.N = N
+        self.onlyfirst = onlyfirst
         self.country = country
         self.plot = plot
         # Differential case counts
         self.delta_cases = df['Total Cases'].values[1:] - df['Total Cases'].values[:-1]
         # Differential death counts
         self.delta_deaths = df['Total Deaths'].values[1:] - df['Total Deaths'].values[:-1]
-        # GP fit
-        with gpflow.defer_build():
-            k = gpflow.kernels.Matern52(1)
-            self.mc = gpflow.models.GPR(df['delta_time_days'].values[:, np.newaxis].astype('float'),
-                                        df['Total Cases'].values[:, np.newaxis].astype('float'), kern=k)
-            self.mc.likelihood.variance.trainable = False
-            self.mc.likelihood.variance = 300 ** 2
-        self.mc.compile()
-        gpflow.train.ScipyOptimizer().minimize(self.mc)
-        print(self.mc.as_pandas_table())
-        with gpflow.defer_build():
-            k = gpflow.kernels.Matern52(1)
-            self.md = gpflow.models.GPR(df['delta_time_days'].values[:, np.newaxis].astype('float'),
-                                        df['Total Deaths'].values[:, np.newaxis].astype('float'), kern=k)
-            self.md.likelihood.variance.trainable = False
-            self.md.likelihood.variance = 300 ** 2
-        self.md.compile()
-        gpflow.train.ScipyOptimizer().minimize(self.md)
-        print(self.md.as_pandas_table())
 
     def rate(self, y, t, beta, k, tau, sigma, gamma, f):
         S, E, I, R, C, D = y
@@ -63,25 +51,102 @@ class Ebola(object):
     def solve(self, beta, k, tau, sigma, gamma, f, offset):
         y0 = [self.N - 1, 0, 1, 0, 1, 0]
         # Offset initial time by constant
-        t = self.df['delta_time_days'].values + offset
+        t = self.df['delta_time_weeks'].values + offset
         t[t < 0] = 0
         t = np.insert(t, 0, 0, axis=0)
         sol = odeint(self.rate, y0, t, args=(beta, k, tau, sigma, gamma, f))
         if self.plot:
             f, ax = plt.subplots()
             ax.set_title(self.country)
-            ax.plot(self.df['delta_time_days'], sol[1:, 4], linestyle='solid', marker='None', color='red')
-            ax.plot(self.df['delta_time_days'], self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
-            ax.plot(self.df['delta_time_days'], sol[1:, 5], linestyle='solid', marker='None', color='blue')
-            ax.plot(self.df['delta_time_days'], self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
+            ax.plot(self.df['delta_time_weeks'], sol[1:, 4], linestyle='solid', marker='None', color='red')
+            ax.plot(self.df['delta_time_weeks'], self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
+            ax.plot(self.df['delta_time_weeks'], sol[1:, 5], linestyle='solid', marker='None', color='blue')
+            ax.plot(self.df['delta_time_weeks'], self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
             plt.show()
         return sol
 
+    def log_prior(self, theta):
+        b, k, tau, sigma, g, f, offset = theta[:-6]
+        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
+        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
+        logPs = []
+        # individual priors
+        logPs.append(beta.logpdf(b, 1.1, 2))
+        logPs.append(gamma.logpdf(k, 1.1, 0))
+        logPs.append(lognorm.logpdf(tau, 1, 0, 10))
+        logPs.append(beta.logpdf(sigma, 1.15, 2))
+        logPs.append(beta.logpdf(g, 1.15, 2))
+        logPs.append(beta.logpdf(f, 2, 2))
+        logPs.append(lognorm.logpdf(offset, 1.5, 0, 100))
+        logPs.append(lognorm.logpdf(scatter_cases, 2, 0, 10))
+        logPs.append(lognorm.logpdf(scatter_cases_outlier, 0.5, 0, 100))
+        logPs.append(lognorm.logpdf(scatter_deaths, 2, 0, 10))
+        logPs.append(lognorm.logpdf(scatter_deaths_outlier, 0.5, 0, 100))
+        logPs.append(beta.logpdf(prob_cases_outlier, 1, 100))
+        logPs.append(beta.logpdf(prob_deaths_outlier, 1, 100))
+        # combined priors
+        logPs.append(lognorm.logpdf(scatter_cases_outlier/scatter_cases, 1.5, 1, 1000))
+        logPs.append(lognorm.logpdf(scatter_deaths_outlier/scatter_deaths, 1.5, 1, 1000))
+        return np.sum(logPs)
+
+    def log_like(self, theta):
+        logP = self.log_prior(theta)
+        if np.isinf(logP):
+            return -np.infty
+        # compute ode model solution
+        theta_ode = theta[:-6]
+        sol = self.solve(*theta_ode)
+        if sol is None:
+            return -np.infty
+        model_cases = sol[1:, 4]
+        model_deaths = sol[1:, 5]
+        delta_model_cases = np.diff(model_cases)
+        delta_model_deaths = np.diff(model_deaths)
+        np.putmask(delta_model_cases, delta_model_cases <= 0, 1e-9)
+        np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
+        # compute loglike
+        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
+        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
+        # avoid NaNs in logarithm
+        prob_cases_outlier = np.clip(prob_cases_outlier, 1e-99, 1-1e-99)
+        scatter_cases = np.clip(scatter_cases, 1e-9, 1e9)
+        scatter_cases_outlier = np.clip(scatter_cases_outlier, 1e-9, 1e9)
+        prob_deaths_outlier = np.clip(prob_deaths_outlier, 1e-99, 1-1e-99)
+        scatter_deaths = np.clip(scatter_deaths, 1e-9, 1e9)
+        scatter_deaths_outlier = np.clip(scatter_deaths_outlier, 1e-9, 1e9)
+
+        if self.onlyfirst is not None:
+            cases = self.delta_cases[:self.onlyfirst]
+            deaths = self.delta_deaths[:self.onlyfirst]
+            delta_model_cases = delta_model_cases[:self.onlyfirst]
+            delta_model_deaths = delta_model_deaths[:self.onlyfirst]
+        else:
+            cases = self.delta_cases
+            deaths = self.delta_deaths
+
+        # model logL as sum of two distributions
+        logLs = []
+        # for cases
+        logLs.append(np.log(1 - prob_cases_outlier) +
+                     norm.logpdf(cases, delta_model_cases, scatter_cases))
+        logLs.append(np.log(prob_cases_outlier) +
+                     norm.logpdf(cases, delta_model_cases, scatter_cases_outlier))
+        # for deaths
+        logLs.append(np.log(1 - prob_deaths_outlier) +
+                     norm.logpdf(deaths, delta_model_deaths, scatter_deaths))
+        logLs.append(np.log(prob_deaths_outlier) +
+                     norm.logpdf(deaths, delta_model_deaths, scatter_deaths_outlier))
+        # using logsumexp helps maintain numerical precision
+        logL = np.sum(logsumexp(logLs, axis=0))
+        if np.isnan(logL):
+            print(theta)
+            return -np.infty
+        return logL
+    
     def __call__(self, theta):
-        sol = self.solve(*theta)
-        loglike = self.mc.predict_density(self.df['delta_time_days'][:, np.newaxis].astype('float'), sol[1:, 4:5]) + \
-                  self.md.predict_density(self.df['delta_time_days'][:, np.newaxis].astype('float'), sol[1:, 5:6])
-        return np.sum(loglike)
+        log_like = self.log_like(theta)
+        log_prior = self.log_prior(theta)
+        return log_prior + log_like
 
 
 def main(args):
@@ -99,7 +164,13 @@ def main(args):
             0.15 + 0.1 * x[:, 3],
             0.15 + 0.1 * x[:, 4],
             0.5 + 0.4 * x[:, 5],
-            100 + 100 * x[:, 6]
+            100 + 100 * x[:, 6],
+            10 + 10 * x[:, 7],
+            100 + 100 * x[:, 8],
+            0.1 + 0.1 * x[:, 9],
+            10 + 10 * x[:, 10],
+            100 + 100 * x[:, 11],
+            0.1 + 0.1 * x[:, 12]
         ]).T
 
     log_dir = os.path.join(args.log_dir, args.country)
@@ -113,7 +184,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--x_dim', type=int, default=7,
+    parser.add_argument('--x_dim', type=int, default=13,
                         help="Dimensionality")
     parser.add_argument('--train_iters', type=int, default=50,
                         help="number of train iters")
