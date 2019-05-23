@@ -8,7 +8,8 @@ from scipy.integrate import solve_ivp, odeint
 #from nnest.nested import NestedSampler
 from scipy.stats import poisson, norm, beta, gamma, lognorm
 from scipy.special import logsumexp
-import ptemcee
+#import ptemcee
+import emcee
 import pickle
 from datetime import datetime
 from tqdm import tqdm
@@ -241,10 +242,13 @@ class Ebola(object):
         return logL
 
 
-    def neg_log_posterior(self, theta):
+    def log_posterior(self, theta):
         log_like = self.log_like(theta)
         log_prior = self.log_prior(theta)
-        return -(log_prior + log_like)
+        return log_prior + log_like
+
+    def neg_log_posterior(self, theta):
+        return -self.log_posterior(theta)
 
 
 def main(args):
@@ -266,7 +270,8 @@ def main(args):
     p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 10.0, 0.01, 1.0, 10.0, 0.01])
     initial_theta = np.random.normal(p0, 0.1 * np.abs(p0), (ntemp, nwalkers, ndim))
 
-    sampler = ptemcee.Sampler(nwalkers, ndim, e.log_like, e.log_prior, ntemps=ntemp, threads=8)
+    #sampler = ptemcee.Sampler(nwalkers, ndim, e.log_like, e.log_prior, ntemps=ntemp, threads=8)
+    sampler = emcee.Sampler(nwalkers, ndim, e.log_posterior, threads=4)
 
     timestamp = datetime.now().isoformat(timespec='minutes')
     theta = initial_theta
