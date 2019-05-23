@@ -21,9 +21,9 @@ class Ebola(object):
     def __init__(self, N, country, plot=False, onlyfirst=None):
         df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
         df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
-        df['delta_time_days'] = (df['WHO report date'] - df['WHO report date'].min()).dt.days
-        df = df.sort_values('delta_time_days')
-        df = df.groupby('delta_time_days').mean().reset_index()
+        df['delta_time_weeks'] = (df['WHO report date'] - df['WHO report date'].min()).dt.weeks
+        df = df.sort_values('delta_time_weeks')
+        df = df.groupby('delta_time_weeks').mean().reset_index()
         self.df = df
         self.N = N
         self.onlyfirst = onlyfirst
@@ -53,7 +53,7 @@ class Ebola(object):
     def solve(self, beta, k, tau, sigma, gamma, f, offset):
         y0 = [self.N - 1, 0, 1, 0, 1, 0]
         # Offset initial time by constant
-        t = self.df['delta_time_days'].values + offset
+        t = self.df['delta_time_weeks'].values + offset
         t = t[t > 0]
         t = np.insert(t, 0, 0, axis=0)
         rate = self.rate_func(beta, k, tau, sigma, gamma, f)
@@ -70,9 +70,9 @@ class Ebola(object):
 
     def makeplot(self, samples=None, ax=None):
         if samples is not None:
-            model_cases = np.zeros((len(samples), len(self.df['delta_time_days'])))
+            model_cases = np.zeros((len(samples), len(self.df['delta_time_weeks'])))
             model_deaths = np.zeros_like(model_cases)
-                                         
+
             for i, theta in enumerate(samples):
                 # compute ode model solution
                 theta_ode = theta[:-6]
@@ -84,12 +84,12 @@ class Ebola(object):
             delta_model_cases = np.diff(model_cases, axis=-1)
             delta_model_deaths = np.diff(model_deaths, axis=-1)
 
-            t = self.df['delta_time_days']
+            t = self.df['delta_time_weeks']
             delta_t = np.diff(t)
 
             rate_model_cases = delta_model_cases / delta_t
             rate_model_deaths = delta_model_deaths / delta_t
-                
+
             c05, c16, c50, c84, c95 = np.percentile(model_cases, [5, 16, 50, 84, 95], axis=0)
             d05, d16, d50, d84, d95 = np.percentile(model_deaths, [5, 16, 50, 84, 95], axis=0)
 
@@ -154,7 +154,7 @@ class Ebola(object):
         ax0.plot(t, self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
         ax1.plot(t[1:], self.delta_deaths, color='blue', mfc='None', marker='o', linestyle='None')
         ax2.plot(t[1:], rate_deaths, color='blue', mfc='None', marker='o', linestyle='None')
-        
+
         if self.onlyfirst is not None:
             ax0.axvline(self.onlyfirst, linestyle=':')
             ax1.axvline(self.onlyfirst, linestyle=':')
@@ -210,7 +210,7 @@ class Ebola(object):
         prob_deaths_outlier = np.clip(prob_deaths_outlier, 1e-99, 1-1e-99)
         scatter_deaths = np.clip(scatter_deaths, 1e-9, 1e9)
         scatter_deaths_outlier = np.clip(scatter_deaths_outlier, 1e-9, 1e9)
-        
+
         if self.onlyfirst is not None:
             cases = self.df['Total Cases'][:self.onlyfirst]
             deaths = self.df['Total Deaths'][:self.onlyfirst]
@@ -221,7 +221,7 @@ class Ebola(object):
             deaths = self.df['Total Deaths']
 
         # model logL as sum of two distributions
-        # 2: a Normal scatter 
+        # 2: a Normal scatter
         # 3: a Normal outlier scatter
         logLs = []
         # for cases
