@@ -257,9 +257,9 @@ def main(args):
            'scatter_cases', 'scatter_cases_outlier', 'prob_cases_outlier',
            'scatter_deaths', 'scatter_deaths_outlier', 'prob_deaths_outlier')
     ndim = len(par)  # number of parameters in the model
-    nwalkers = 50  # number of MCMC walkers
-    nburn = 10000  # "burn-in" period to let chains stabilize
-    nsamp = 50000  # number of MCMC steps to take after burn-in
+    nwalkers = 500  # number of MCMC walkers
+    nburn = 5000  # "burn-in" period to let chains stabilize
+    nsamp = 10000  # number of MCMC steps to take after burn-in
 
     p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 10.0, 0.01, 1.0, 10.0, 0.01])
     initial_theta = np.random.normal(p0, 0.1 * np.abs(p0), (nwalkers, ndim))
