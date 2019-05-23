@@ -219,13 +219,13 @@ class Ebola(object):
         scatter_deaths_outlier = np.clip(scatter_deaths_outlier, 1e-9, 1e9)
 
         if self.onlyfirst is not None:
-            cases = self.df['Total Cases'][:self.onlyfirst]
-            deaths = self.df['Total Deaths'][:self.onlyfirst]
-            model_cases = model_cases[:self.onlyfirst]
-            model_deaths = model_deaths[:self.onlyfirst]
+            cases = self.delta_cases[:self.onlyfirst]
+            deaths = self.delta_deaths[:self.onlyfirst]
+            delta_model_cases = delta_model_cases[:self.onlyfirst]
+            delta_model_deaths = delta_model_deaths[:self.onlyfirst]
         else:
-            cases = self.df['Total Cases']
-            deaths = self.df['Total Deaths']
+            cases = self.delta_cases
+            deaths = self.delta_deaths
 
         # model logL as sum of two distributions
         # 2: a Normal scatter
@@ -233,14 +233,14 @@ class Ebola(object):
         logLs = []
         # for cases
         logLs.append(np.log(1 - prob_cases_outlier) +
-                     norm.logpdf(cases, model_cases, scatter_cases))
+                     norm.logpdf(cases, delta_model_cases, scatter_cases))
         logLs.append(np.log(prob_cases_outlier) +
-                     norm.logpdf(cases, model_cases, scatter_cases_outlier))
+                     norm.logpdf(cases, delta_model_cases, scatter_cases_outlier))
         # for deaths
         logLs.append(np.log(1 - prob_deaths_outlier) +
-                     norm.logpdf(deaths, model_deaths, scatter_deaths))
+                     norm.logpdf(deaths, delta_model_deaths, scatter_deaths))
         logLs.append(np.log(prob_deaths_outlier) +
-                     norm.logpdf(deaths, model_deaths, scatter_deaths_outlier))
+                     norm.logpdf(deaths, delta_model_deaths, scatter_deaths_outlier))
         # using logsumexp helps maintain numerical precision
         logL = np.sum(logsumexp(logLs, axis=0))
         if np.isnan(logL):
