@@ -277,10 +277,10 @@ def main(args):
             theta = None
             if i % nsave == 0:
                 with open('chain-{}'.format(timestamp), 'wb') as f:
-                    pickle.dump(sampler.chain, f)
+                    pickle.dump([sampler.chain, sampler.lnprobability], f)
 
     with open('chain-{}'.format(timestamp), 'wb') as f:
-        pickle.dump(sampler.chain, f)
+        pickle.dump([sampler.chain, sampler.lnprobability], f)
 
 
 if __name__ == '__main__':
