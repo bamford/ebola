@@ -14,6 +14,8 @@ from nnest.nested import NestedSampler
 from scipy.stats import poisson, norm, beta, gamma, lognorm
 from scipy.special import logsumexp
 
+scatter_cases_outlier = scatter_deaths_outlier = 1000
+
 
 class Ebola(object):
 
@@ -71,9 +73,9 @@ class Ebola(object):
         return sol
 
     def log_prior(self, theta):
-        b, k, tau, sigma, g, f, offset = theta[:-6]
-        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
-        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
+        b, k, tau, sigma, g, f, offset = theta[:-4]
+        scatter_cases, prob_cases_outlier = theta[-4:-2]
+        scatter_deaths, prob_deaths_outlier = theta[-2:]
         logPs = []
         # individual priors
         logPs.append(beta.logpdf(b, 1.1, 2))
@@ -84,14 +86,9 @@ class Ebola(object):
         logPs.append(beta.logpdf(f, 2, 2))
         logPs.append(lognorm.logpdf(offset, 1.5, 0, 100))
         logPs.append(lognorm.logpdf(scatter_cases, 2, 0, 10))
-        logPs.append(lognorm.logpdf(scatter_cases_outlier, 0.5, 0, 100))
         logPs.append(lognorm.logpdf(scatter_deaths, 2, 0, 10))
-        logPs.append(lognorm.logpdf(scatter_deaths_outlier, 0.5, 0, 100))
         logPs.append(beta.logpdf(prob_cases_outlier, 1, 100))
         logPs.append(beta.logpdf(prob_deaths_outlier, 1, 100))
-        # combined priors
-        logPs.append(lognorm.logpdf(scatter_cases_outlier/scatter_cases, 1.5, 1, 1000))
-        logPs.append(lognorm.logpdf(scatter_deaths_outlier/scatter_deaths, 1.5, 1, 1000))
         return np.sum(logPs)
 
     def log_like(self, theta):
@@ -99,7 +96,7 @@ class Ebola(object):
         if np.isinf(logP):
             return -np.infty
         # compute ode model solution
-        theta_ode = theta[:-6]
+        theta_ode = theta[:-4]
         sol = self.solve(*theta_ode)
         if sol is None:
             return -np.infty
@@ -110,15 +107,13 @@ class Ebola(object):
         np.putmask(delta_model_cases, delta_model_cases <= 0, 1e-9)
         np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
         # compute loglike
-        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
-        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
+        scatter_cases, prob_cases_outlier = theta[-4:-2]
+        scatter_deaths, prob_deaths_outlier = theta[-2:]
         # avoid NaNs in logarithm
         prob_cases_outlier = np.clip(prob_cases_outlier, 1e-99, 1-1e-99)
         scatter_cases = np.clip(scatter_cases, 1e-9, 1e9)
-        scatter_cases_outlier = np.clip(scatter_cases_outlier, 1e-9, 1e9)
         prob_deaths_outlier = np.clip(prob_deaths_outlier, 1e-99, 1-1e-99)
         scatter_deaths = np.clip(scatter_deaths, 1e-9, 1e9)
-        scatter_deaths_outlier = np.clip(scatter_deaths_outlier, 1e-9, 1e9)
 
         if self.onlyfirst is not None:
             cases = self.delta_cases[:self.onlyfirst]
@@ -177,10 +172,8 @@ def main(args):
             0.5 + 0.5 * x[:, 5],
             25 + 25 * x[:, 6],
             200 + 200 * x[:, 7],
-            1000 + 900 * x[:, 8],
             0.01 + 0.01 * x[:, 9],
             200 + 200 * x[:, 10],
-            1000 + 900 * x[:, 11],
             0.01 + 0.01 * x[:, 12]
         ]).T
 

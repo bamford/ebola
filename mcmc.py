@@ -19,6 +19,8 @@ import os
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
+scatter_cases_outlier = scatter_deaths_outlier = 1000
+
 
 class Ebola(object):
 
@@ -87,7 +89,7 @@ class Ebola(object):
 
             for i, theta in enumerate(samples):
                 # compute ode model solution
-                theta_ode = theta[:-6]
+                theta_ode = theta[:-4]
                 sol = self.solve(*theta_ode)
                 if sol is not None:
                     model_cases[i] = sol[:, 4]
@@ -98,8 +100,8 @@ class Ebola(object):
 
             if scatter or outliers:
                 if scatter:
-                    scatter_cases = samples[:, -6]
-                    scatter_deaths = samples[:, -3]
+                    scatter_cases = samples[:, -4]
+                    scatter_deaths = samples[:, -2]
                 else:
                     scatter_cases = 0
                     scatter_deaths = 0
@@ -112,8 +114,8 @@ class Ebola(object):
                                                  len(samples))).T
                 delta_model_deaths += noise_deaths
                 if outliers:
-                    scatter_cases_outlier, prob_cases_outlier = samples[:, -5:-3].T
-                    scatter_deaths_outlier, prob_deaths_outlier = samples[:, -2:].T
+                    prob_cases_outlier = samples[:, -3]
+                    prob_deaths_outlier = samples[:, -1].T
                     noise_cases = np.random.normal(0, scatter_cases_outlier,
                                                    (delta_model_cases.shape[1],
                                                     len(samples))).T
@@ -198,9 +200,9 @@ class Ebola(object):
             ax2.axvline(self.onlyfirst, linestyle=':')
 
     def log_prior(self, theta):
-        b, k, tau, sigma, g, f, offset = theta[:-6]
-        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
-        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
+        b, k, tau, sigma, g, f, offset = theta[:-4]
+        scatter_cases, prob_cases_outlier = theta[-4:-2]
+        scatter_deaths, prob_deaths_outlier = theta[-2:]
         logPs = []
         # individual priors
         logPs.append(beta.logpdf(b, 1.1, 2))
@@ -211,14 +213,9 @@ class Ebola(object):
         logPs.append(beta.logpdf(f, 2, 2))
         logPs.append(lognorm.logpdf(offset, 1.5, 0, 100))
         logPs.append(lognorm.logpdf(scatter_cases, 2, 0, 10))
-        logPs.append(lognorm.logpdf(scatter_cases_outlier, 0.5, 0, 100))
         logPs.append(lognorm.logpdf(scatter_deaths, 2, 0, 10))
-        logPs.append(lognorm.logpdf(scatter_deaths_outlier, 0.5, 0, 100))
         logPs.append(beta.logpdf(prob_cases_outlier, 1, 100))
         logPs.append(beta.logpdf(prob_deaths_outlier, 1, 100))
-        # combined priors
-        logPs.append(lognorm.logpdf(scatter_cases_outlier/scatter_cases, 1.5, 1, 1000))
-        logPs.append(lognorm.logpdf(scatter_deaths_outlier/scatter_deaths, 1.5, 1, 1000))
         return np.sum(logPs)
 
     def log_like(self, theta):
@@ -226,7 +223,7 @@ class Ebola(object):
         if np.isinf(logP):
             return -np.infty
         # compute ode model solution
-        theta_ode = theta[:-6]
+        theta_ode = theta[:-4]
         sol = self.solve(*theta_ode)
         if sol is None:
             return -np.infty
@@ -238,15 +235,13 @@ class Ebola(object):
         np.putmask(delta_model_cases, delta_model_cases <= 0, 1e-9)
         np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
         # compute loglike
-        scatter_cases, scatter_cases_outlier, prob_cases_outlier = theta[-6:-3]
-        scatter_deaths, scatter_deaths_outlier, prob_deaths_outlier = theta[-3:]
+        scatter_cases, prob_cases_outlier = theta[-4:-2]
+        scatter_deaths, prob_deaths_outlier = theta[-2:]
         # avoid NaNs in logarithm
         prob_cases_outlier = np.clip(prob_cases_outlier, 1e-99, 1-1e-99)
         scatter_cases = np.clip(scatter_cases, 1e-9, 1e9)
-        scatter_cases_outlier = np.clip(scatter_cases_outlier, 1e-9, 1e9)
         prob_deaths_outlier = np.clip(prob_deaths_outlier, 1e-99, 1-1e-99)
         scatter_deaths = np.clip(scatter_deaths, 1e-9, 1e9)
-        scatter_deaths_outlier = np.clip(scatter_deaths_outlier, 1e-9, 1e9)
 
         if self.onlyfirst is not None:
             cases = self.delta_cases[:self.onlyfirst]
@@ -302,14 +297,14 @@ def main(args):
     np.random.seed(666)  # reproducible
 
     par = ('beta', 'k', 'tau', 'sigma', 'gamma', 'f', 'offset',
-           'scatter_cases', 'scatter_cases_outlier', 'prob_cases_outlier',
-           'scatter_deaths', 'scatter_deaths_outlier', 'prob_deaths_outlier')
+           'scatter_cases', 'prob_cases_outlier',
+           'scatter_deaths', 'prob_deaths_outlier')
     ndim = len(par)  # number of parameters in the model
     nwalkers = 500  # number of MCMC walkers
     nburn = 5000  # "burn-in" period to let chains stabilize
     nsamp = 10000  # number of MCMC steps to take after burn-in
 
-    p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 10.0, 0.01, 1.0, 10.0, 0.01])
+    p0 = np.array([0.3, 0.005, 5, 0.15, 0.15, 0.5, 10, 1.0, 0.01, 1.0, 0.01])
     initial_theta = np.random.normal(p0, 0.1 * np.abs(p0), (nwalkers, ndim))
 
     timestamp = datetime.now().isoformat(timespec='minutes')
