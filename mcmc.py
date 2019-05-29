@@ -179,15 +179,15 @@ class Ebola(object):
             ax0.fill_between(t, d16, d84, color='blue', alpha=0.2)
             ax2.plot(t[1:], rd50, linestyle='solid', marker='None',
                      color='blue', lw=3)
-            ax2.fill_between(t[1:], rd05, rd95, color='blue', alpha=0.2)
-            ax2.fill_between(t[1:], rd16, rd84, color='blue', alpha=0.2)
+            ax2.fill_between(t[1:], dd05, dd95, color='blue', alpha=0.2)
+            ax2.fill_between(t[1:], dd16, dd84, color='blue', alpha=0.2)
             for j in sample_examples:
                 ax0.plot(t, model_deaths[j], linestyle='solid',
                          marker='None', color='blue')
-                ax2.plot(t[1:], rate_model_deaths[j], linestyle='solid',
+                ax2.plot(t[1:], delta_model_deaths[j], linestyle='solid',
                          marker='None', color='blue')
         ax0.plot(t, self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
-        ax2.plot(t[1:], rate_deaths, color='blue', mfc='None', marker='o', linestyle='None')
+        ax2.plot(t[1:], self.delta_deaths, color='blue', mfc='None', marker='o', linestyle='None')
         #ax0.set_ylim(0, self.df['Total Cases'].max() * 1.1)
 
         if self.onlyfirst is not None:
