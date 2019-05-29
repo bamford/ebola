@@ -75,7 +75,7 @@ class Ebola(object):
             self.makeplot()
         return sol
 
-    def makeplot(self, samples=None, ax=None):
+    def makeplot(self, samples=None, ax=None, scatter=False, outliers=False):
         if samples is not None:
             model_cases = np.zeros((len(samples), len(self.df['delta_time_weeks'])))
             model_deaths = np.zeros_like(model_cases)
@@ -90,6 +90,43 @@ class Ebola(object):
 
             delta_model_cases = np.diff(model_cases, axis=-1)
             delta_model_deaths = np.diff(model_deaths, axis=-1)
+
+            if scatter or outliers:
+                if scatter:
+                    scatter_cases = samples[:, -6]
+                    scatter_deaths = samples[:, -3]
+                else:
+                    scatter_cases = 0
+                    scatter_deaths = 0
+                noise_cases = np.random.normal(0, scatter_cases,
+                                               (delta_model_cases.shape[1],
+                                                len(samples))).T
+                delta_model_cases += noise_cases
+                noise_deaths = np.random.normal(0, scatter_deaths,
+                                                (delta_model_deaths.shape[1],
+                                                 len(samples))).T
+                delta_model_deaths += noise_deaths
+                if outliers:
+                    scatter_cases_outlier, prob_cases_outlier = samples[:, -5:-3].T
+                    scatter_deaths_outlier, prob_deaths_outlier = samples[:, -2:].T
+                    noise_cases = np.random.normal(0, scatter_cases_outlier,
+                                                   (delta_model_cases.shape[1],
+                                                    len(samples))).T
+                    noise_cases *= np.random.binomial(1, prob_cases_outlier,
+                                                      (delta_model_cases.shape[1],
+                                                      len(samples))).T
+                    delta_model_cases += noise_cases
+                    noise_deaths = np.random.normal(0, scatter_deaths_outlier,
+                                                    (delta_model_deaths.shape[1],
+                                                     len(samples))).T
+                    noise_deaths *= np.random.binomial(1, prob_deaths_outlier,
+                                                       (delta_model_deaths.shape[1],
+                                                        len(samples))).T
+                    delta_model_deaths += noise_deaths
+                model_cases = np.cumsum(delta_model_cases, axis=-1)
+                model_cases = np.insert(model_cases, 0, 0, axis=-1)
+                model_deaths = np.cumsum(delta_model_deaths, axis=-1)
+                model_deaths = np.insert(model_deaths, 0, 0, axis=-1)
 
             t = self.df['delta_time_weeks']
             delta_t = np.diff(t)
