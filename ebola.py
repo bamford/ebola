@@ -126,23 +126,28 @@ class Ebola(object):
 
         # model logL as sum of two distributions
         logLs = []
-        # for cases
+        logLs = []
         logLs.append(np.log(1 - prob_cases_outlier) +
                      norm.logpdf(cases, delta_model_cases, scatter_cases))
         logLs.append(np.log(prob_cases_outlier) +
                      norm.logpdf(cases, delta_model_cases, scatter_cases_outlier))
+        # using logsumexp helps maintain numerical precision
+        logL_cases = np.sum(logsumexp(logLs, axis=0))
         # for deaths
+        logLs = []
         logLs.append(np.log(1 - prob_deaths_outlier) +
                      norm.logpdf(deaths, delta_model_deaths, scatter_deaths))
         logLs.append(np.log(prob_deaths_outlier) +
                      norm.logpdf(deaths, delta_model_deaths, scatter_deaths_outlier))
         # using logsumexp helps maintain numerical precision
-        logL = np.sum(logsumexp(logLs, axis=0))
+        logL_deaths = np.sum(logsumexp(logLs, axis=0))
+        # combine cases and deaths
+        logL = logL_cases + logL_deaths
         if np.isnan(logL):
             print(theta)
             return -np.infty
         return logL
-    
+
     def __call__(self, theta):
         log_like = self.log_like(theta)
         log_prior = self.log_prior(theta)
