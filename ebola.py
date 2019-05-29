@@ -20,6 +20,7 @@ class Ebola(object):
     def __init__(self, N, country, weekly=False, plot=False, onlyfirst=None):
         df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
         df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
+        df = df.set_index('WHO report date')
         if weekly:
             df = df.resample('W').mean()
         else:
