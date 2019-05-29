@@ -32,7 +32,9 @@ class Ebola(object):
         else:
             df = df.resample('D').mean()
         df = df.dropna()
-        df['delta_time'] = (df.index - df.index.min()).days // 7 + 1
+        df['delta_time'] = (df.index - df.index.min()).days
+        if weekly:
+             df['delta_time'] = df['delta_time'] // 7 + 1
         df = df.sort_values('delta_time')
         self.df = df
         self.N = N
@@ -293,7 +295,8 @@ class Ebola(object):
 
 def main(args):
 
-    e = Ebola(args.N, args.country, weekly=args.weekly, plot=False)
+    weekly = not args.daily
+    e = Ebola(args.N, args.country, weekly=weekly, plot=False)
 
     # set up emcee
     np.random.seed(666)  # reproducible
@@ -352,7 +355,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--country', type=str, default='guinea')
     parser.add_argument('--N', type=int, default=1000000)
-    parser.add_argument('--weekly', action='store_true')
+    parser.add_argument('--daily', action='store_true')
 
     args = parser.parse_args()
     main(args)
