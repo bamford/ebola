@@ -22,15 +22,18 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 class Ebola(object):
 
-    def __init__(self, N, country, plot=False, onlyfirst=None):
+    def __init__(self, N, country, weekly=False, plot=False, onlyfirst=None):
         df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
         df = df.drop(columns=['Unnamed: 0'])
         df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
         df = df.set_index('WHO report date')
-        df = df.resample('W').mean()
+        if weekly:
+            df = df.resample('W').mean()
+        else:
+            df = df.resample('D').mean()
         df = df.dropna()
-        df['delta_time_weeks'] = (df.index - df.index.min()).days // 7 + 1
-        df = df.sort_values('delta_time_weeks')
+        df['delta_time'] = (df.index - df.index.min()).days // 7 + 1
+        df = df.sort_values('delta_time')
         self.df = df
         self.N = N
         self.onlyfirst = onlyfirst
@@ -60,7 +63,7 @@ class Ebola(object):
     def solve(self, beta, k, tau, sigma, gamma, f, offset):
         y0 = [self.N - 1, 0, 1, 0, 1, 0]
         # Offset initial time by constant
-        t = self.df['delta_time_weeks'].values + offset
+        t = self.df['delta_time'].values + offset
         t = t[t > 0]
         t = np.insert(t, 0, 0, axis=0)
         rate = self.rate_func(beta, k, tau, sigma, gamma, f)
@@ -77,7 +80,7 @@ class Ebola(object):
 
     def makeplot(self, samples=None, ax=None, scatter=False, outliers=False):
         if samples is not None:
-            model_cases = np.zeros((len(samples), len(self.df['delta_time_weeks'])))
+            model_cases = np.zeros((len(samples), len(self.df['delta_time'])))
             model_deaths = np.zeros_like(model_cases)
 
             for i, theta in enumerate(samples):
@@ -128,7 +131,7 @@ class Ebola(object):
                 model_deaths = np.cumsum(delta_model_deaths, axis=-1)
                 model_deaths = np.insert(model_deaths, 0, 0, axis=-1)
 
-            t = self.df['delta_time_weeks']
+            t = self.df['delta_time']
             delta_t = np.diff(t)
 
             rate_model_cases = delta_model_cases / delta_t
@@ -290,7 +293,7 @@ class Ebola(object):
 
 def main(args):
 
-    e = Ebola(args.N, args.country, plot=False)
+    e = Ebola(args.N, args.country, weekly=args.weekly, plot=False)
 
     # set up emcee
     np.random.seed(666)  # reproducible
@@ -349,6 +352,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--country', type=str, default='guinea')
     parser.add_argument('--N', type=int, default=1000000)
+    parser.add_argument('--weekly', action='store_true')
 
     args = parser.parse_args()
     main(args)

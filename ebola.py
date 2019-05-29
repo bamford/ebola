@@ -17,14 +17,14 @@ from scipy.special import logsumexp
 
 class Ebola(object):
 
-    def __init__(self, N, country, plot=False, onlyfirst=None):
+    def __init__(self, N, country, weekly=False, plot=False, onlyfirst=None):
         df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
         df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
         df = df.set_index('WHO report date')
         df = df.resample('W').mean()
         df = df.dropna()
-        df['delta_time_weeks'] = (df.index - df.index.min()).days // 7 + 1
-        df = df.sort_values('delta_time_weeks')
+        df['delta_time'] = (df.index - df.index.min()).days // 7 + 1
+        df = df.sort_values('delta_time')
         self.df = df
         self.N = N
         self.onlyfirst = onlyfirst
@@ -51,17 +51,17 @@ class Ebola(object):
     def solve(self, beta, k, tau, sigma, gamma, f, offset):
         y0 = [self.N - 1, 0, 1, 0, 1, 0]
         # Offset initial time by constant
-        t = self.df['delta_time_weeks'].values + offset
+        t = self.df['delta_time'].values + offset
         t[t < 0] = 0
         t = np.insert(t, 0, 0, axis=0)
         sol = odeint(self.rate, y0, t, args=(beta, k, tau, sigma, gamma, f))
         if self.plot:
             f, ax = plt.subplots()
             ax.set_title(self.country)
-            ax.plot(self.df['delta_time_weeks'], sol[1:, 4], linestyle='solid', marker='None', color='red')
-            ax.plot(self.df['delta_time_weeks'], self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
-            ax.plot(self.df['delta_time_weeks'], sol[1:, 5], linestyle='solid', marker='None', color='blue')
-            ax.plot(self.df['delta_time_weeks'], self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
+            ax.plot(self.df['delta_time'], sol[1:, 4], linestyle='solid', marker='None', color='red')
+            ax.plot(self.df['delta_time'], self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
+            ax.plot(self.df['delta_time'], sol[1:, 5], linestyle='solid', marker='None', color='blue')
+            ax.plot(self.df['delta_time'], self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
             plt.show()
         return sol
 
@@ -156,7 +156,7 @@ class Ebola(object):
 
 def main(args):
 
-    e = Ebola(args.N, args.country, plot=False)
+    e = Ebola(args.N, args.country, weekly=args.weekly, plot=False)
 
     def loglike(z):
         return np.array([e(x) for x in z])
@@ -209,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--country', type=str, default='guinea')
     parser.add_argument('--N', type=int, default=1000000)
+    parser.add_argument('--weekly', action='store_true')
 
     args = parser.parse_args()
     main(args)
