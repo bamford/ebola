@@ -203,6 +203,9 @@ class Ebola(object):
         b, k, tau, sigma, g, f, offset = theta[:-4]
         scatter_cases, prob_cases_outlier = theta[-4:-2]
         scatter_deaths, prob_deaths_outlier = theta[-2:]
+        # hard priors
+        if prob_cases_outlier > 0.02 or prob_deaths_outlier > 0.02:
+            return -np.infty
         logPs = []
         # individual priors
         logPs.append(beta.logpdf(b, 1.1, 2))
