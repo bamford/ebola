@@ -126,7 +126,7 @@ class Ebola(object):
 
         # model logL as sum of two distributions
         logLs = []
-        logLs = []
+        # for cases
         logLs.append(np.log(1 - prob_cases_outlier) +
                      norm.logpdf(cases, delta_model_cases, scatter_cases))
         logLs.append(np.log(prob_cases_outlier) +

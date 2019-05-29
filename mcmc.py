@@ -312,16 +312,16 @@ def main(args):
     nupdate = 10
     nsave = 100
 
-    with Pool() as pool:
+    with Pool(1) as pool:
         sampler = emcee.EnsembleSampler(nwalkers, ndim, e.log_posterior, pool=pool)
         for i in tqdm(range((nburn + nsamp)//nupdate)):
             sampler.run_mcmc(theta, nupdate, thin=nthin)
             theta = None
             if i % nsave == 0:
-                with open('chain-{}'.format(timestamp), 'wb') as f:
+                with open('chain-{}-{}'.format(args.country, timestamp), 'wb') as f:
                     pickle.dump([sampler.chain, sampler.lnprobability], f)
 
-    with open('chain-{}'.format(timestamp), 'wb') as f:
+    with open('chain-{}-{}'.format(args.country, timestamp), 'wb') as f:
         pickle.dump([sampler.chain, sampler.lnprobability], f)
 
 
