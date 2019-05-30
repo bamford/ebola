@@ -39,7 +39,13 @@ def process_data(country='guinea', nboots=100):
     mean_deaths = rate_deaths.mean(0)
     std_deaths = rate_deaths.std(0)
     cov_deaths = np.cov(rate_deaths.T)
-    return df, dfs, mean_cases, cov_cases, mean_deaths, cov_deaths
+    ok = (std_cases > 0) & (std_deaths > 0)
+    mean_cases = mean_cases[ok]
+    cov_cases = cov_cases[ok, ok]
+    mean_deaths = mean_deaths[ok]
+    cov_deaths = cov_deaths[ok, ok]
+    days = dfs['Day'][ok]
+    return df, dfs, days, mean_cases, cov_cases, mean_deaths, cov_deaths
 
 
 def apply_revisions(df, maxit=100):

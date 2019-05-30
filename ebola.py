@@ -18,12 +18,12 @@ from ebola_data import process_data
 class Ebola(object):
 
     def __init__(self, N, country):
-        df, dfs, cases, cov_cases, deaths, cov_deaths = process_data(country)
+        df, dfs, days, cases, cov_cases, deaths, cov_deaths = process_data(country)
         self.N = N
         self.country = country
         self.df = df
         self.dfs = dfs
-        self.days = dfs['Days']
+        self.days = days
         self.cases = cases
         self.cov_cases = cov_cases
         self.deaths = deaths
@@ -125,7 +125,7 @@ class Ebola(object):
         # Offset initial time by constant
         t = self.days + offset
         t[t < 0] = 0
-        t = np.insert(t, 0, 0, axis=0)
+        #t = np.insert(t, 0, 0, axis=0)
         sol = odeint(self.rate, y0, t, args=(beta, k, tau, sigma, gamma, f))
         return sol
 
