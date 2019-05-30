@@ -150,18 +150,20 @@ class Ebola(object):
         sol = self.solve(*theta)
         if sol is None:
             return -np.infty
-        model_cases = sol[1:, 4]
-        model_deaths = sol[1:, 5]
-        delta_model_cases = np.diff(model_cases)
-        delta_model_deaths = np.diff(model_deaths)
+        model_cases = sol[:, 4]
+        model_deaths = sol[:, 5]
+        delta_model_cases = np.insert(np.diff(model_cases), 0, 0)
+        delta_model_deaths = np.insert(np.diff(model_deaths), 0, 0)
         np.putmask(delta_model_cases, delta_model_cases <= 0, 1e-9)
         np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
         # compute loglike
         logL_cases = mvnorm.logpdf(delta_model_cases,
-                                   self.cases, self.cov_cases)
+                                   self.cases, self.cov_cases,
+                                   allow_singular=True)
         logL_cases = logL_cases.sum()
         logL_deaths = mvnorm.logpdf(delta_model_deaths,
-                                    self.deaths, self.cov_deaths)
+                                    self.deaths, self.cov_deaths,
+                                    allow_singular=True)
         logL_deaths = logL_deaths.sum()
         # combine cases and deaths
         logL = logL_cases + logL_deaths

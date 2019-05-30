@@ -41,7 +41,7 @@ def process_data(country='guinea', nboots=100):
     cov_deaths = np.cov(rate_deaths.T)
     ok = (std_cases > 0) & (std_deaths > 0)
     mean_cases = mean_cases[ok]
-    cov_cases = cov_cases[ok, ok]
+    cov_cases = cov_cases[ok][:,ok]
     mean_deaths = mean_deaths[ok]
     cov_deaths = cov_deaths[ok, ok]
     days = dfs['Day'][ok]
