@@ -6,41 +6,106 @@ from __future__ import  division, print_function
 import argparse
 import os
 
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 from nnest.nested import NestedSampler
-from scipy.stats import poisson, norm, beta, gamma, lognorm
-from scipy.special import logsumexp
-
-scatter_cases_outlier = scatter_deaths_outlier = 1000
+from scipy.stats import beta, gamma, lognorm
+from scipy.stats import multivariate_normal as mvnorm
+from ebola_data import process_data
 
 
 class Ebola(object):
 
-    def __init__(self, N, country, weekly=False, plot=False, onlyfirst=None):
-        df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
-        df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
-        df = df.set_index('WHO report date')
-        if weekly:
-            df = df.resample('W').mean()
-        else:
-            df = df.resample('D').mean()
-        df = df.dropna()
-        df['delta_time'] = (df.index - df.index.min()).days
-        if weekly:
-             df['delta_time'] = df['delta_time'] // 7 + 1
-        df = df.sort_values('delta_time')
-        self.df = df
+    def __init__(self, N, country):
+        df, dfs, cases, cov_cases, deaths, cov_deaths = process_data(country)
         self.N = N
-        self.onlyfirst = onlyfirst
         self.country = country
-        self.plot = plot
-        # Differential case counts
-        self.delta_cases = df['Total Cases'].values[1:] - df['Total Cases'].values[:-1]
-        # Differential death counts
-        self.delta_deaths = df['Total Deaths'].values[1:] - df['Total Deaths'].values[:-1]
+        self.df = df
+        self.dfs = dfs
+        self.days = dfs['Days']
+        self.cases = cases
+        self.cov_cases = cov_cases
+        self.deaths = deaths
+        self.cov_deaths = cov_deaths
+
+    def makeplot(self, samples=None, ax=None, scatter=False):
+        if samples is not None:
+            model_cases = np.zeros((len(samples), len(self.days)))
+            model_deaths = np.zeros_like(model_cases)
+
+            for i, theta in enumerate(samples):
+                # compute ode model solution
+                theta_ode = theta[:-4]
+                sol = self.solve(*theta_ode)
+                if sol is not None:
+                    model_cases[i] = sol[:, 4]
+                    model_deaths[i] = sol[:, 5]
+
+            delta_model_cases = np.diff(model_cases, axis=-1)
+            delta_model_deaths = np.diff(model_deaths, axis=-1)
+
+            if scatter:
+                noise_cases = mvnorm(0, self.cov_cases)
+                delta_model_cases += noise_cases.rvs((delta_model_cases.shape[1],
+                                                      len(samples))).T
+                model_cases = np.cumsum(delta_model_cases, axis=-1)
+                model_cases = np.insert(model_cases, 0, 0, axis=-1)
+                noise_deaths = mvnorm(0, self.cov_deaths)
+                delta_model_deaths += noise_deaths.rvs((delta_model_deaths.shape[1],
+                                                       len(samples))).T
+                model_deaths = np.cumsum(delta_model_deaths, axis=-1)
+                model_deaths = np.insert(model_deaths, 0, 0, axis=-1)
+
+            t = self.days
+            delta_t = np.diff(t)
+            rate_model_cases = delta_model_cases / delta_t
+            rate_model_deaths = delta_model_deaths / delta_t
+
+            c05, c16, c50, c84, c95 = np.percentile(model_cases, [5, 16, 50, 84, 95], axis=0)
+            d05, d16, d50, d84, d95 = np.percentile(model_deaths, [5, 16, 50, 84, 95], axis=0)
+            rc05, rc16, rc50, rc84, rc95 = np.percentile(rate_model_cases, [5, 16, 50, 84, 95], axis=0)
+            rd05, rd16, rd50, rd84, rd95 = np.percentile(rate_model_deaths, [5, 16, 50, 84, 95], axis=0)
+
+        if ax is None:
+            f, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 10))
+        else:
+            ax0, ax1, ax2 = ax
+
+        if samples is not None:
+            ax0.plot(t, c50, linestyle='solid', marker='None',
+                     color='red', lw=3)
+            ax0.fill_between(t, c05, c95, color='red', alpha=0.2)
+            ax0.fill_between(t, c16, c84, color='red', alpha=0.2)
+            ax1.plot(t[1:], dc50, linestyle='solid', marker='None',
+                     color='red', lw=3)
+            ax1.fill_between(t[1:], dc05, dc95, color='red', alpha=0.2)
+            ax1.fill_between(t[1:], dc16, dc84, color='red', alpha=0.2)
+            for j in sample_examples:
+                ax0.plot(t, model_cases[j], linestyle='solid',
+                         marker='None', color='red')
+                ax1.plot(t[1:], delta_model_cases[j], linestyle='solid',
+                         marker='None', color='red')
+        ax0.plot(t, self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
+        ax1.plot(t, self.df['Rate Cases'], color='red', mfc='None', marker='o', linestyle='None')
+        ax1.plot(t, self.cases, color='red', mfc='None', marker='None', linestyle='--')
+        if samples is not None:
+            ax0.plot(t, d50, linestyle='solid', marker='None',
+                     color='blue', lw=3)
+            ax0.fill_between(t, d05, d95, color='blue', alpha=0.2)
+            ax0.fill_between(t, d16, d84, color='blue', alpha=0.2)
+            ax2.plot(t[1:], rd50, linestyle='solid', marker='None',
+                     color='blue', lw=3)
+            ax2.fill_between(t[1:], dd05, dd95, color='blue', alpha=0.2)
+            ax2.fill_between(t[1:], dd16, dd84, color='blue', alpha=0.2)
+            for j in sample_examples:
+                ax0.plot(t, model_deaths[j], linestyle='solid',
+                         marker='None', color='blue')
+                ax2.plot(t[1:], delta_model_deaths[j], linestyle='solid',
+                         marker='None', color='blue')
+        ax0.plot(t, self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
+        ax2.plot(t, self.df['Rate Cases'], color='blue', mfc='None', marker='o', linestyle='None')
+        ax2.plot(t, self.deaths, color='blue', mfc='None', marker='None', linestyle='--')
 
     def rate(self, y, t, beta, k, tau, sigma, gamma, f):
         S, E, I, R, C, D = y
@@ -58,24 +123,14 @@ class Ebola(object):
     def solve(self, beta, k, tau, sigma, gamma, f, offset):
         y0 = [self.N - 1, 0, 1, 0, 1, 0]
         # Offset initial time by constant
-        t = self.df['delta_time'].values + offset
+        t = self.days + offset
         t[t < 0] = 0
         t = np.insert(t, 0, 0, axis=0)
         sol = odeint(self.rate, y0, t, args=(beta, k, tau, sigma, gamma, f))
-        if self.plot:
-            f, ax = plt.subplots()
-            ax.set_title(self.country)
-            ax.plot(self.df['delta_time'], sol[1:, 4], linestyle='solid', marker='None', color='red')
-            ax.plot(self.df['delta_time'], self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
-            ax.plot(self.df['delta_time'], sol[1:, 5], linestyle='solid', marker='None', color='blue')
-            ax.plot(self.df['delta_time'], self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
-            plt.show()
         return sol
 
     def log_prior(self, theta):
-        b, k, tau, sigma, g, f, offset = theta[:-4]
-        scatter_cases, prob_cases_outlier = theta[-4:-2]
-        scatter_deaths, prob_deaths_outlier = theta[-2:]
+        b, k, tau, sigma, g, f, offset = theta
         logPs = []
         # individual priors
         logPs.append(beta.logpdf(b, 1.1, 2))
@@ -85,10 +140,6 @@ class Ebola(object):
         logPs.append(beta.logpdf(g, 1.15, 2))
         logPs.append(beta.logpdf(f, 2, 2))
         logPs.append(lognorm.logpdf(offset, 1.5, 0, 100))
-        logPs.append(lognorm.logpdf(scatter_cases, 2, 0.01, 10))
-        logPs.append(lognorm.logpdf(scatter_deaths, 2, 0.01, 10))
-        logPs.append(beta.logpdf(prob_cases_outlier, 1, 100))
-        logPs.append(beta.logpdf(prob_deaths_outlier, 1, 100))
         return np.sum(logPs)
 
     def log_like(self, theta):
@@ -96,8 +147,7 @@ class Ebola(object):
         if np.isinf(logP):
             return -np.infty
         # compute ode model solution
-        theta_ode = theta[:-4]
-        sol = self.solve(*theta_ode)
+        sol = self.solve(*theta)
         if sol is None:
             return -np.infty
         model_cases = sol[1:, 4]
@@ -107,40 +157,12 @@ class Ebola(object):
         np.putmask(delta_model_cases, delta_model_cases <= 0, 1e-9)
         np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
         # compute loglike
-        scatter_cases, prob_cases_outlier = theta[-4:-2]
-        scatter_deaths, prob_deaths_outlier = theta[-2:]
-        # avoid NaNs in logarithm
-        prob_cases_outlier = np.clip(prob_cases_outlier, 1e-99, 1-1e-99)
-        scatter_cases = np.clip(scatter_cases, 1e-9, 1e9)
-        prob_deaths_outlier = np.clip(prob_deaths_outlier, 1e-99, 1-1e-99)
-        scatter_deaths = np.clip(scatter_deaths, 1e-9, 1e9)
-
-        if self.onlyfirst is not None:
-            cases = self.delta_cases[:self.onlyfirst]
-            deaths = self.delta_deaths[:self.onlyfirst]
-            delta_model_cases = delta_model_cases[:self.onlyfirst]
-            delta_model_deaths = delta_model_deaths[:self.onlyfirst]
-        else:
-            cases = self.delta_cases
-            deaths = self.delta_deaths
-
-        # model logL as sum of two distributions
-        logLs = []
-        # for cases
-        logLs.append(np.log(1 - prob_cases_outlier) +
-                     norm.logpdf(cases, delta_model_cases, scatter_cases))
-        logLs.append(np.log(prob_cases_outlier) +
-                     norm.logpdf(cases, delta_model_cases, scatter_cases_outlier))
-        # using logsumexp helps maintain numerical precision
-        logL_cases = np.sum(logsumexp(logLs, axis=0))
-        # for deaths
-        logLs = []
-        logLs.append(np.log(1 - prob_deaths_outlier) +
-                     norm.logpdf(deaths, delta_model_deaths, scatter_deaths))
-        logLs.append(np.log(prob_deaths_outlier) +
-                     norm.logpdf(deaths, delta_model_deaths, scatter_deaths_outlier))
-        # using logsumexp helps maintain numerical precision
-        logL_deaths = np.sum(logsumexp(logLs, axis=0))
+        logL_cases = mvnorm.logpdf(delta_model_cases,
+                                   self.cases, self.cov_cases)
+        logL_cases = logL_cases.sum()
+        logL_deaths = mvnorm.logpdf(delta_model_deaths,
+                                    self.deaths, self.cov_deaths)
+        logL_deaths = logL_deaths.sum()
         # combine cases and deaths
         logL = logL_cases + logL_deaths
         if np.isnan(logL):
@@ -156,8 +178,7 @@ class Ebola(object):
 
 def main(args):
 
-    weekly = not args.daily
-    e = Ebola(args.N, args.country, weekly=weekly, plot=False)
+    e = Ebola(args.N, args.country)
 
     def loglike(z):
         return np.array([e(x) for x in z])
@@ -170,25 +191,24 @@ def main(args):
             0.5 + 0.5 * x[:, 3],
             0.5 + 0.5 * x[:, 4],
             0.5 + 0.5 * x[:, 5],
-            25 + 25 * x[:, 6],
-            200 + 200 * x[:, 7],
-            0.01 + 0.01 * x[:, 9],
-            200 + 200 * x[:, 10],
-            0.01 + 0.01 * x[:, 12]
+            25 + 25 * x[:, 6]
         ]).T
 
     log_dir = os.path.join(args.log_dir, args.country)
-    sampler = NestedSampler(args.x_dim, loglike, transform=transform, log_dir=log_dir, num_live_points=args.num_live_points,
-                            hidden_dim=args.hidden_dim, num_layers=args.num_layers, num_blocks=args.num_blocks, num_slow=args.num_slow,
+    sampler = NestedSampler(args.x_dim, loglike, transform=transform,
+                            log_dir=log_dir, num_live_points=args.num_live_points,
+                            hidden_dim=args.hidden_dim, num_layers=args.num_layers,
+                            num_blocks=args.num_blocks, num_slow=args.num_slow,
                             use_gpu=args.use_gpu)
-    sampler.run(train_iters=args.train_iters, mcmc_steps=args.mcmc_steps, volume_switch=args.switch, noise=args.noise)
+    sampler.run(train_iters=args.train_iters, mcmc_steps=args.mcmc_steps,
+                volume_switch=args.switch, noise=args.noise)
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--x_dim', type=int, default=13,
+    parser.add_argument('--x_dim', type=int, default=7,
                         help="Dimensionality")
     parser.add_argument('--train_iters', type=int, default=50,
                         help="number of train iters")
@@ -208,7 +228,6 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir', type=str, default='logs')
     parser.add_argument('--country', type=str, default='guinea')
     parser.add_argument('--N', type=int, default=1000000)
-    parser.add_argument('--daily', action='store_true')
 
     args = parser.parse_args()
     main(args)
