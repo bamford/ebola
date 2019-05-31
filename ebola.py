@@ -14,8 +14,6 @@ from scipy.stats import beta, gamma, lognorm
 from scipy.stats import multivariate_normal as mvnorm
 from ebola_data import process_data
 
-from IPython import embed
-
 
 class Ebola(object):
 
