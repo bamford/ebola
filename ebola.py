@@ -160,7 +160,7 @@ class Ebola(object):
         if np.isnan(logL):
             print(theta)
             return -np.infty
-        return logL, logL_cases, logL_deaths
+        return logL
 
     def __call__(self, theta):
         log_like = self.log_like(theta)
