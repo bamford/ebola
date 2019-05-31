@@ -14,6 +14,8 @@ from scipy.stats import beta, gamma, lognorm
 from scipy.stats import multivariate_normal as mvnorm
 from ebola_data import process_data
 
+from IPython import embed
+
 
 class Ebola(object):
 
@@ -36,8 +38,7 @@ class Ebola(object):
 
             for i, theta in enumerate(samples):
                 # compute ode model solution
-                theta_ode = theta[:-4]
-                sol = self.solve(*theta_ode)
+                sol = self.solve(*theta)
                 if sol is not None:
                     model_cases[i] = sol[:, 4]
                     model_deaths[i] = sol[:, 5]
@@ -46,14 +47,16 @@ class Ebola(object):
             delta_model_deaths = np.diff(model_deaths, axis=-1)
 
             if scatter:
-                noise_cases = mvnorm(0, self.cov_cases)
-                delta_model_cases += noise_cases.rvs((delta_model_cases.shape[1],
-                                                      len(samples))).T
+                noise_cases = mvnorm(np.zeros(len(self.days)),
+                                     self.cov_cases,
+                                     allow_singular=True)
+                delta_model_cases += noise_cases.rvs(len(samples))[:, 1:]
                 model_cases = np.cumsum(delta_model_cases, axis=-1)
                 model_cases = np.insert(model_cases, 0, 0, axis=-1)
-                noise_deaths = mvnorm(0, self.cov_deaths)
-                delta_model_deaths += noise_deaths.rvs((delta_model_deaths.shape[1],
-                                                       len(samples))).T
+                noise_deaths = mvnorm(np.zeros(len(self.days)),
+                                      self.cov_deaths,
+                                      allow_singular=True)
+                delta_model_deaths += noise_deaths.rvs(len(samples))[:, 1:]
                 model_deaths = np.cumsum(delta_model_deaths, axis=-1)
                 model_deaths = np.insert(model_deaths, 0, 0, axis=-1)
 
@@ -77,17 +80,12 @@ class Ebola(object):
                      color='red', lw=3)
             ax0.fill_between(t, c05, c95, color='red', alpha=0.2)
             ax0.fill_between(t, c16, c84, color='red', alpha=0.2)
-            ax1.plot(t[1:], dc50, linestyle='solid', marker='None',
+            ax1.plot(t[1:], rc50, linestyle='solid', marker='None',
                      color='red', lw=3)
-            ax1.fill_between(t[1:], dc05, dc95, color='red', alpha=0.2)
-            ax1.fill_between(t[1:], dc16, dc84, color='red', alpha=0.2)
-            for j in sample_examples:
-                ax0.plot(t, model_cases[j], linestyle='solid',
-                         marker='None', color='red')
-                ax1.plot(t[1:], delta_model_cases[j], linestyle='solid',
-                         marker='None', color='red')
-        ax0.plot(t, self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
-        ax1.plot(t, self.df['Rate Cases'], color='red', mfc='None', marker='o', linestyle='None')
+            ax1.fill_between(t[1:], rc05, rc95, color='red', alpha=0.2)
+            ax1.fill_between(t[1:], rc16, rc84, color='red', alpha=0.2)
+        ax0.plot(self.df['Day'], self.df['Total Cases'], color='red', mfc='None', marker='o', linestyle='None')
+        ax1.plot(self.df['Day'], self.df['Rate Cases'], color='red', mfc='None', marker='o', linestyle='None')
         ax1.plot(t, self.cases, color='red', mfc='None', marker='None', linestyle='--')
         if samples is not None:
             ax0.plot(t, d50, linestyle='solid', marker='None',
@@ -96,15 +94,10 @@ class Ebola(object):
             ax0.fill_between(t, d16, d84, color='blue', alpha=0.2)
             ax2.plot(t[1:], rd50, linestyle='solid', marker='None',
                      color='blue', lw=3)
-            ax2.fill_between(t[1:], dd05, dd95, color='blue', alpha=0.2)
-            ax2.fill_between(t[1:], dd16, dd84, color='blue', alpha=0.2)
-            for j in sample_examples:
-                ax0.plot(t, model_deaths[j], linestyle='solid',
-                         marker='None', color='blue')
-                ax2.plot(t[1:], delta_model_deaths[j], linestyle='solid',
-                         marker='None', color='blue')
-        ax0.plot(t, self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
-        ax2.plot(t, self.df['Rate Cases'], color='blue', mfc='None', marker='o', linestyle='None')
+            ax2.fill_between(t[1:], rd05, rd95, color='blue', alpha=0.2)
+            ax2.fill_between(t[1:], rd16, rd84, color='blue', alpha=0.2)
+        ax0.plot(self.df['Day'], self.df['Total Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
+        ax2.plot(self.df['Day'], self.df['Rate Deaths'], color='blue', mfc='None', marker='o', linestyle='None')
         ax2.plot(t, self.deaths, color='blue', mfc='None', marker='None', linestyle='--')
 
     def rate(self, y, t, beta, k, tau, sigma, gamma, f):
@@ -158,10 +151,12 @@ class Ebola(object):
         np.putmask(delta_model_deaths, delta_model_deaths <= 0, 1e-9)
         # compute loglike
         logL_cases = mvnorm.logpdf(delta_model_cases,
-                                   self.cases, self.cov_cases)
+                                   self.cases, self.cov_cases,
+                                   allow_singular=True)
         logL_cases = logL_cases.sum()
         logL_deaths = mvnorm.logpdf(delta_model_deaths,
-                                    self.deaths, self.cov_deaths)
+                                    self.deaths, self.cov_deaths,
+                                    allow_singular=True)
         logL_deaths = logL_deaths.sum()
         # combine cases and deaths
         logL = logL_cases + logL_deaths
