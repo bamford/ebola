@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-def process_data(country='guinea', nboots=100):
+
+def process_data(country='guinea', nboots=100, min_std=0.1):
     df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
     df = df.drop(columns=['Unnamed: 0'])
     df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
@@ -30,7 +31,8 @@ def process_data(country='guinea', nboots=100):
     rate_cases = np.zeros((nboots, len(dfs)))
     rate_deaths = np.zeros((nboots, len(dfs)))
     for i in range(nboots):
-        dfsi = smooth_rates(df.sample(len(df), replace=True), df.index)
+        dfsi = smooth_rates(df.sample(len(df), replace=True).sort_index(),
+                            df.index)
         rate_cases[i] = dfsi['Rate Cases'].values
         rate_deaths[i] = dfsi['Rate Deaths'].values
     mean_cases = rate_cases.mean(0)
@@ -39,12 +41,12 @@ def process_data(country='guinea', nboots=100):
     mean_deaths = rate_deaths.mean(0)
     std_deaths = rate_deaths.std(0)
     cov_deaths = np.cov(rate_deaths.T)
-    ok = (std_cases > 0) & (std_deaths > 0)
+    ok = (std_cases > min_std) & (std_deaths > min_std)
     mean_cases = mean_cases[ok]
-    cov_cases = cov_cases[ok][:,ok]
+    cov_cases = cov_cases[ok][:, ok]
     mean_deaths = mean_deaths[ok]
-    cov_deaths = cov_deaths[ok, ok]
-    days = dfs['Day'][ok]
+    cov_deaths = cov_deaths[ok][:, ok]
+    days = dfs['Day'][ok].values
     return df, dfs, days, mean_cases, cov_cases, mean_deaths, cov_deaths
 
 
@@ -79,10 +81,10 @@ def apply_revisions(df, maxit=100):
 def smooth_rates(df, index, smooth=14):
     dfs = df.drop(columns=['Total Cases', 'Total Deaths', 'Day',
                            'Delta Cases', 'Delta Deaths', 'Delta Time'])
-    daypad = smooth * 4
+    daypad = smooth * 6
     dfs.loc[index.min() - pd.DateOffset(daypad)] = 0
     dfs.loc[index.max() + pd.DateOffset(1)] = np.nan
-    dfs = dfs.resample('D').mean()
+    dfs = dfs.resample('D').max()
     dfs = dfs.interpolate('linear')
     dfs = dfs.rolling(daypad, win_type='gaussian').mean(std=smooth).dropna()
     rec_cases = np.cumsum(dfs['Rate Cases'])

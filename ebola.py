@@ -117,9 +117,10 @@ class Ebola(object):
         y0 = [self.N - 1, 0, 1, 0, 1, 0]
         # Offset initial time by constant
         t = self.days + offset
-        t[t < 0] = 0
-        #t = np.insert(t, 0, 0, axis=0)
+        t = t[t > 0]
+        t = np.insert(t, 0, 0, axis=0)
         sol = odeint(self.rate, y0, t, args=(beta, k, tau, sigma, gamma, f))
+        sol = sol[1:]
         return sol
 
     def log_prior(self, theta):
@@ -153,17 +154,15 @@ class Ebola(object):
         logL_cases = mvnorm.logpdf(delta_model_cases,
                                    self.cases, self.cov_cases,
                                    allow_singular=True)
-        logL_cases = logL_cases.sum()
         logL_deaths = mvnorm.logpdf(delta_model_deaths,
                                     self.deaths, self.cov_deaths,
                                     allow_singular=True)
-        logL_deaths = logL_deaths.sum()
         # combine cases and deaths
-        logL = logL_cases + logL_deaths
+        logL = logL_cases.sum() + logL_deaths.sum()
         if np.isnan(logL):
             print(theta)
             return -np.infty
-        return logL
+        return logL, logL_cases, logL_deaths
 
     def __call__(self, theta):
         log_like = self.log_like(theta)
