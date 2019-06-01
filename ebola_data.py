@@ -1,16 +1,23 @@
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
+import pickle
+import os.path
+from tqdm import tqdm
+import argparse
 
-
-def process_data(country='guinea', nboots=100, min_std=0.1):
+def process_data(country='guinea',
+                 nboots=100000, min_std=0.1, smooth=14, dayzero=7,
+                 from_pickle=True):
+    pf = 'data/{}-{}-{}-{}.pickle'.format(country, nboots, smooth, dayzero)
+    if from_pickle and os.path.exists(pf):
+        data = pickle.load(pf)
+        return data
     df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
     df = df.drop(columns=['Unnamed: 0'])
     df['WHO report date'] = pd.to_datetime(df['WHO report date'], format="%d/%m/%Y")
     df = df.set_index('WHO report date')
     # assume first case was this many days before first report
     # affects day numbering and inferred initial rate
-    dayzero = 7
     df.loc[df.index.min() - pd.DateOffset(dayzero)] = 0
     df = df.sort_index()
     df = df.reset_index().rename_axis('report')
@@ -30,7 +37,7 @@ def process_data(country='guinea', nboots=100, min_std=0.1):
     dfs = smooth_rates(df, df.index)
     rate_cases = np.zeros((nboots, len(dfs)))
     rate_deaths = np.zeros((nboots, len(dfs)))
-    for i in range(nboots):
+    for i in tqdm(range(nboots)):
         dfsi = smooth_rates(df.sample(len(df), replace=True).sort_index(),
                             df.index)
         rate_cases[i] = dfsi['Rate Cases'].values
@@ -47,6 +54,8 @@ def process_data(country='guinea', nboots=100, min_std=0.1):
     mean_deaths = mean_deaths[ok]
     cov_deaths = cov_deaths[ok][:, ok]
     days = dfs['Day'][ok].values
+    with open(pf, 'wb') as f:
+        pickle.dump((df, dfs, days, mean_cases, cov_cases, mean_deaths, cov_deaths), f)
     return df, dfs, days, mean_cases, cov_cases, mean_deaths, cov_deaths
 
 
@@ -98,3 +107,12 @@ def smooth_rates(df, index, smooth=14):
     dfs['Day'] = (dfs.index - datezero).days
     dfs = dfs[dfs['Day'] >= 0]
     return dfs
+
+
+if __name__ == "__main__":
+    print('Processing data and creating pickles')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--country', type=str, default='')
+    args = parser.parse_args()
+    if args.country:
+        process_data(args.country, from_pickle=True)
