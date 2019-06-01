@@ -11,7 +11,7 @@ def process_data(country='guinea',
     pf = 'data/{}-{}-{}-{}.pickle'.format(country, nboots, smooth, dayzero)
     if from_pickle and os.path.exists(pf):
         with open(pf, 'rb') as f:
-            data = pickle.load(pf)
+            data = pickle.load(f)
         return data
     df = pd.read_csv('data/previous-case-counts-%s.csv' % country)
     df = df.drop(columns=['Unnamed: 0'])
