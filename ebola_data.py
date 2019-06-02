@@ -6,7 +6,7 @@ from tqdm import tqdm
 import argparse
 
 def process_data(country='guinea',
-                 nboots=100000, min_std=0.1, smooth=14, dayzero=7,
+                 nboots=100000, min_std=0.1, smooth=7, dayzero=7,
                  from_pickle=True):
     pf = 'data/{}-{}-{}-{}.pickle'.format(country, nboots, smooth, dayzero)
     if from_pickle and os.path.exists(pf):
@@ -88,7 +88,7 @@ def apply_revisions(df, maxit=100):
     return df
 
 
-def smooth_rates(df, index, smooth=14):
+def smooth_rates(df, index, smooth=7):
     dfs = df.drop(columns=['Total Cases', 'Total Deaths', 'Day',
                            'Delta Cases', 'Delta Deaths', 'Delta Time'])
     daypad = smooth * 6
@@ -107,6 +107,7 @@ def smooth_rates(df, index, smooth=14):
     datezero = index.min()
     dfs['Day'] = (dfs.index - datezero).days
     dfs = dfs[dfs['Day'] >= 0]
+    dfs = df.resample('W').mean()
     return dfs
 
 
