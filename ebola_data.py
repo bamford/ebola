@@ -107,7 +107,7 @@ def smooth_rates(df, index, smooth=7):
     datezero = index.min()
     dfs['Day'] = (dfs.index - datezero).days
     dfs = dfs[dfs['Day'] >= 0]
-    dfs = df.resample('W').mean()
+    dfs = dfs.resample('W').mean()
     return dfs
 
 
