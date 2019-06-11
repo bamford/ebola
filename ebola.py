@@ -16,7 +16,7 @@ from ebola_data import process_data
 class Ebola(object):
 
     def __init__(self, N, country):
-        df, dfs, days, cases, cov_cases, deaths, cov_deaths = process_data(country)
+        df, dfs, days, cases, cov_cases, deaths, cov_deaths = process_data(country, smooth=7)
         self.N = N
         self.country = country
         self.df = df
@@ -154,11 +154,11 @@ class Ebola(object):
                                     self.deaths, self.cov_deaths,
                                     allow_singular=True)
         # combine cases and deaths
-        logL = logL_cases.sum() + logL_deaths.sum()
+        logL = logL_cases + logL_deaths
         if np.isnan(logL):
             print(theta)
             return -np.infty
-        return logL
+        return logL, logL_cases, logL_deaths
 
     def __call__(self, theta):
         log_like = self.log_like(theta)
